@@ -137,18 +137,4 @@ async def websocket_endpoint(websocket: WebSocket):
             pass
 
 
-if __name__ == "__main__":
-    import uvicorn
-    import os
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=port,
-        timeout_keep_alive=60,
-        ws_ping_interval=15,
-        ws_ping_timeout=15
-    )
-
-
 
