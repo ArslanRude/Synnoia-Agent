@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synnoia WebSocket Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 700px;
+            background: #16213e;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #e94560;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .status.connected {
+            background: #0f3460;
+            color: #4ecca3;
+        }
+        .status.disconnected {
+            background: #0f3460;
+            color: #e94560;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #0f3460;
+            border-radius: 8px;
+            background: #0f3460;
+            color: #fff;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #e94560;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+        }
+        button:hover {
+            background: #ff6b6b;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background: #0f3460;
+            border-radius: 8px;
+            min-height: 60px;
+        }
+        .response-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .response-text {
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .error {
+            color: #e94560;
+        }
+        .history {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .history-item {
+            padding: 10px;
+            background: #0f3460;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .history-item .query {
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .history-item .response {
+            color: #4ecca3;
+        }
+        .json-output {
+            background: #0a0a15;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔮 Synnoia Test Client</h1>
+        <div id="status" class="status disconnected">● Disconnected</div>
+
+        <div class="input-group">
+            <label for="serverUrl">WebSocket Server URL</label>
+            <input type="text" id="serverUrl" value="ws://localhost:8000/ws/agent" placeholder="ws://localhost:8000/ws/agent">
+        </div>
+
+        <div class="input-group">
+            <label for="query">Query *</label>
+            <textarea id="query" placeholder="Enter your query here...">write a full length blog on ronaldo CR7</textarea>
+        </div>
+
+        <div class="input-group">
+            <label for="docText">Document Text</label>
+            <textarea id="docText" placeholder="Enter document text..."></textarea>
+        </div>
+
+        <div class="input-group">
+            <label for="docJson">Document JSON (TipTap format)</label>
+            <textarea id="docJson" placeholder='{"type":"doc","content":[]}'></textarea>
+        </div>
+
+        <button id="sendBtn" onclick="sendRequest()" disabled>Send Request</button>
+
+        <div class="response">
+            <div class="response-label">Response</div>
+            <div id="response" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Chitchat Response</div>
+            <div id="chitchatResponse" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Clarification Question</div>
+            <div id="clarificationQuestion" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Rephrased Query</div>
+            <div id="rephrasedQuery" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Intent</div>
+            <div id="intent" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Operation Type</div>
+            <div id="operationType" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Anchor ID</div>
+            <div id="anchorId" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Diagram Type</div>
+            <div id="diagramType" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Title</div>
+            <div id="title" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Action Summary</div>
+            <div id="actionSummary" class="response-text">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Response JSON (TipTap)</div>
+            <div id="responseJson" class="json-output">Waiting for request...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">Graph XML</div>
+            <div id="graphXml" class="json-output">Waiting for request...</div>
+        </div>
+
+        <div class="history" id="history"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isConnected = false;
+        const serverUrl = document.getElementById('serverUrl');
+        const queryInput = document.getElementById('query');
+        const docTextInput = document.getElementById('docText');
+        const docJsonInput = document.getElementById('docJson');
+        const sendBtn = document.getElementById('sendBtn');
+        const responseDiv = document.getElementById('response');
+        const chitchatResponseDiv = document.getElementById('chitchatResponse');
+        const clarificationQuestionDiv = document.getElementById('clarificationQuestion');
+        const rephrasedQueryDiv = document.getElementById('rephrasedQuery');
+        const intentDiv = document.getElementById('intent');
+        const operationTypeDiv = document.getElementById('operationType');
+        const anchorIdDiv = document.getElementById('anchorId');
+        const diagramTypeDiv = document.getElementById('diagramType');
+        const titleDiv = document.getElementById('title');
+        const actionSummaryDiv = document.getElementById('actionSummary');
+        const responseJsonDiv = document.getElementById('responseJson');
+        const graphXmlDiv = document.getElementById('graphXml');
+        const statusDiv = document.getElementById('status');
+        const historyDiv = document.getElementById('history');
+
+        function connect() {
+            const url = serverUrl.value.trim();
+            if (!url) return;
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    isConnected = true;
+                    updateStatus(true);
+                    sendBtn.disabled = false;
+                    responseDiv.textContent = 'Connected! Ready to send requests.';
+                    chitchatResponseDiv.textContent = 'Connected! Ready to send requests.';
+                    clarificationQuestionDiv.textContent = 'Connected! Ready to send requests.';
+                    rephrasedQueryDiv.textContent = 'Connected! Ready to send requests.';
+                    intentDiv.textContent = 'Connected! Ready to send requests.';
+                    responseJsonDiv.textContent = 'Connected! Ready to send requests.';
+                    graphXmlDiv.textContent = 'Connected! Ready to send requests.';
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    displayResponse(data);
+                };
+
+                ws.onclose = () => {
+                    isConnected = false;
+                    updateStatus(false);
+                    sendBtn.disabled = true;
+                    responseDiv.textContent = 'Disconnected from server.';
+                    chitchatResponseDiv.textContent = 'Disconnected from server.';
+                    clarificationQuestionDiv.textContent = 'Disconnected from server.';
+                    rephrasedQueryDiv.textContent = 'Disconnected from server.';
+                    intentDiv.textContent = 'Disconnected from server.';
+                    responseJsonDiv.textContent = 'Disconnected from server.';
+                    graphXmlDiv.textContent = 'Disconnected from server.';
+                };
+
+                ws.onerror = (error) => {
+                    responseDiv.innerHTML = '<span class="error">Connection error. Check server URL.</span>';
+                    chitchatResponseDiv.innerHTML = '<span class="error">Connection error. Check server URL.</span>';
+                    clarificationQuestionDiv.innerHTML = '<span class="error">Connection error. Check server URL.</span>';
+                    rephrasedQueryDiv.innerHTML = '<span class="error">Connection error. Check server URL.</span>';
+                    intentDiv.innerHTML = '<span class="error">Connection error. Check server URL.</span>';
+                    responseJsonDiv.innerHTML = '<span class="error">Connection error. Check server URL.</span>';
+                    graphXmlDiv.innerHTML = '<span class="error">Connection error. Check server URL.</span>';
+                };
+            } catch (error) {
+                responseDiv.innerHTML = '<span class="error">Invalid WebSocket URL</span>';
+                chitchatResponseDiv.innerHTML = '<span class="error">Invalid WebSocket URL</span>';
+                clarificationQuestionDiv.innerHTML = '<span class="error">Invalid WebSocket URL</span>';
+                rephrasedQueryDiv.innerHTML = '<span class="error">Invalid WebSocket URL</span>';
+                intentDiv.innerHTML = '<span class="error">Invalid WebSocket URL</span>';
+                responseJsonDiv.innerHTML = '<span class="error">Invalid WebSocket URL</span>';
+                graphXmlDiv.innerHTML = '<span class="error">Invalid WebSocket URL</span>';
+            }
+        }
+
+        function updateStatus(connected) {
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = '● Connected';
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = '● Disconnected';
+            }
+        }
+
+        function sendRequest() {
+            if (!isConnected || !ws) {
+                responseDiv.innerHTML = '<span class="error">Not connected to server</span>';
+                return;
+            }
+
+            const query = queryInput.value;
+            const doc_text = docTextInput.value;
+            const doc_json = docJsonInput.value;
+
+            if (!query) {
+                responseDiv.innerHTML = '<span class="error">Please provide a query</span>';
+                return;
+            }
+
+            const request = {
+                query: query,
+                doc_text: doc_text,
+                doc_json: doc_json
+            };
+
+            ws.send(JSON.stringify(request));
+            responseDiv.textContent = 'Waiting for response...';
+            chitchatResponseDiv.textContent = 'Waiting for response...';
+            clarificationQuestionDiv.textContent = 'Waiting for response...';
+            rephrasedQueryDiv.textContent = 'Waiting for response...';
+            intentDiv.textContent = 'Waiting for response...';
+            operationTypeDiv.textContent = 'Waiting for response...';
+            anchorIdDiv.textContent = 'Waiting for response...';
+            diagramTypeDiv.textContent = 'Waiting for response...';
+            titleDiv.textContent = 'Waiting for response...';
+            actionSummaryDiv.textContent = 'Waiting for response...';
+            responseJsonDiv.textContent = 'Waiting for response...';
+            graphXmlDiv.textContent = 'Waiting for response...';
+        }
+
+        function displayResponse(data) {
+            if (data.status === 'processing') {
+                responseDiv.textContent = data.message;
+                chitchatResponseDiv.textContent = 'Processing...';
+                clarificationQuestionDiv.textContent = 'Processing...';
+                rephrasedQueryDiv.textContent = 'Processing...';
+                intentDiv.textContent = 'Processing...';
+                operationTypeDiv.textContent = 'Processing...';
+                anchorIdDiv.textContent = 'Processing...';
+                diagramTypeDiv.textContent = 'Processing...';
+                titleDiv.textContent = 'Processing...';
+                actionSummaryDiv.textContent = 'Processing...';
+                responseJsonDiv.textContent = 'Processing...';
+                graphXmlDiv.textContent = 'Processing...';
+            } else if (data.error) {
+                responseDiv.innerHTML = `<span class="error">Error: ${data.error}</span>`;
+                chitchatResponseDiv.innerHTML = `<span class="error">Error</span>`;
+                clarificationQuestionDiv.innerHTML = `<span class="error">Error</span>`;
+                rephrasedQueryDiv.innerHTML = `<span class="error">Error</span>`;
+                intentDiv.innerHTML = `<span class="error">Error</span>`;
+                operationTypeDiv.innerHTML = `<span class="error">Error</span>`;
+                anchorIdDiv.innerHTML = `<span class="error">Error</span>`;
+                diagramTypeDiv.innerHTML = `<span class="error">Error</span>`;
+                titleDiv.innerHTML = `<span class="error">Error</span>`;
+                actionSummaryDiv.innerHTML = `<span class="error">Error</span>`;
+                responseJsonDiv.innerHTML = `<span class="error">Error: ${data.error}</span>`;
+                graphXmlDiv.innerHTML = `<span class="error">Error: ${data.error}</span>`;
+            } else if (data.response !== undefined || data.response_json !== undefined || data.chitchat_response !== undefined || data.clarification_question !== undefined) {
+                // This is final response
+                responseDiv.textContent = data.response || 'No response text';
+                chitchatResponseDiv.textContent = data.chitchat_response || 'No chitchat response';
+                clarificationQuestionDiv.textContent = data.clarification_question || 'No clarification question';
+                rephrasedQueryDiv.textContent = data.rephrased_query || 'No rephrased query';
+                intentDiv.textContent = data.intent || 'No intent';
+                operationTypeDiv.textContent = data.operation_type || 'N/A';
+                anchorIdDiv.textContent = data.anchor_id || 'N/A';
+                diagramTypeDiv.textContent = data.diagram_type || 'N/A';
+                titleDiv.textContent = data.title || 'N/A';
+                actionSummaryDiv.textContent = data.action_summary || 'N/A';
+                if (data.response_json) {
+                    responseJsonDiv.textContent = JSON.stringify(data.response_json, null, 2);
+                } else {
+                    responseJsonDiv.textContent = 'No JSON response';
+                }
+                if (data.graph) {
+                    graphXmlDiv.textContent = data.graph;
+                } else {
+                    graphXmlDiv.textContent = 'No graph XML';
+                }
+                addToHistory(queryInput.value, data.response || data.chitchat_response || data.clarification_question);
+            }
+        }
+
+        function addToHistory(query, response) {
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            const shortQuery = query.length > 50 ? query.substring(0, 50) + '...' : query;
+            item.innerHTML = `
+                <div class="query">${shortQuery || '(empty)'}</div>
+                <div class="response">${response || '(empty)'}</div>
+            `;
+            historyDiv.insertBefore(item, historyDiv.firstChild);
+        }
+
+        // Auto-connect on load
+        connect();
+
+        // Reconnect when URL changes
+        serverUrl.addEventListener('change', () => {
+            if (ws) ws.close();
+            connect();
+        });
+
+        // Allow Ctrl+Enter to send
+        queryInput.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') sendRequest();
+        });
+        docTextInput.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') sendRequest();
+        });
+        docJsonInput.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') sendRequest();
+        });
+    </script>
+</body>
+</html>

@@ -66,7 +66,7 @@ def segments_to_tiptap_content(segments: list[dict]) -> list[dict]:
 
 
 def _default_para_attrs(**overrides) -> dict:
-    base = {"indent": None, "textAlign": None, "lineHeight": 1.5, "margin": {}}
+    base = {"indent": None, "textAlign": None, "lineHeight": 1.5, "margin": {}, "id": None}
     base.update(overrides)
     return base
 
@@ -100,7 +100,8 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
     # ── Heading ─────────────────────────────────────────────────────
     if ntype == "heading":
         level = node.get("level") or 2
-        toc_id = node.get("toc_id") or node.get("id")
+        node_id = node.get("id")
+        toc_id = node.get("toc_id")
         fmt = node.get("formatting") or {}
         text = node.get("text") or ""
 
@@ -110,7 +111,7 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
             "textAlign": node.get("textAlign"),
             "lineHeight": node.get("lineHeight") or "1.375",
             "margin": node.get("margin") or {},
-            "id": toc_id,
+            "id": node_id,
             "data-toc-id": toc_id,
             "level": level,
         }
@@ -130,6 +131,7 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
             "textAlign": node.get("textAlign"),
             "lineHeight": node.get("lineHeight") or 1.5,
             "margin": node.get("margin") or {},
+            "id": node.get("id"),
         }
         segments = node.get("segments") or []
         content_nodes = segments_to_tiptap_content(segments)
@@ -143,7 +145,11 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
         segments = node.get("segments") or []
         para_attrs = _default_para_attrs(textAlign="start")
         inner_para = _wrap_in_paragraph(segments_to_tiptap_content(segments), para_attrs)
-        return {"type": "blockquote", "content": [inner_para]}
+        result: dict[str, Any] = {"type": "blockquote", "content": [inner_para]}
+        node_id = node.get("id")
+        if node_id:
+            result["attrs"] = {"id": node_id}
+        return result
 
     # ── Ordered list ────────────────────────────────────────────────
     if ntype == "ordered_list":
@@ -152,21 +158,29 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
         list_items: list[dict] = []
         for item in items_raw:
             segs = item.get("segments") or []
+            item_id = item.get("id")
             # Each listItem in TipTap wraps paragraph(s)
             # We keep a single paragraph per item (restoring split paragraphs
             # exactly is impossible without original split markers, so one para)
             para_attrs = _default_para_attrs(textAlign="start")
             inner = _wrap_in_paragraph(segments_to_tiptap_content(segs), para_attrs)
+            list_item_attrs: dict[str, Any] = {"indent": None}
+            if item_id:
+                list_item_attrs["id"] = item_id
             list_items.append({
                 "type": "listItem",
-                "attrs": {"indent": None},
+                "attrs": list_item_attrs,
                 "content": [inner],
             })
-        return {
+        result: dict[str, Any] = {
             "type": "orderedList",
             "attrs": {"margin": {}, "start": 1, "listType": list_type},
             "content": list_items,
         }
+        node_id = node.get("id")
+        if node_id:
+            result["attrs"]["id"] = node_id
+        return result
 
     # ── Bullet list ─────────────────────────────────────────────────
     if ntype == "bullet_list":
@@ -175,18 +189,26 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
         list_items = []
         for item in items_raw:
             segs = item.get("segments") or []
+            item_id = item.get("id")
             para_attrs = _default_para_attrs()
             inner = _wrap_in_paragraph(segments_to_tiptap_content(segs), para_attrs)
+            list_item_attrs: dict[str, Any] = {"indent": None}
+            if item_id:
+                list_item_attrs["id"] = item_id
             list_items.append({
                 "type": "listItem",
-                "attrs": {"indent": None},
+                "attrs": list_item_attrs,
                 "content": [inner],
             })
-        return {
+        result: dict[str, Any] = {
             "type": "bulletList",
             "attrs": {"margin": {}, "listType": list_type},
             "content": list_items,
         }
+        node_id = node.get("id")
+        if node_id:
+            result["attrs"]["id"] = node_id
+        return result
 
     # ── Task list ───────────────────────────────────────────────────
     if ntype == "task_list":
@@ -195,20 +217,28 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
         for item in items_raw:
             checked = item.get("checked") or False
             text_val = item.get("text") or ""
+            item_id = item.get("id")
             inner_para = _wrap_in_paragraph(
                 [{"type": "text", "text": text_val}],
                 _default_para_attrs(textAlign="start"),
             )
+            task_item_attrs: dict[str, Any] = {"indent": None, "checked": checked}
+            if item_id:
+                task_item_attrs["id"] = item_id
             task_items.append({
                 "type": "taskItem",
-                "attrs": {"indent": None, "checked": checked},
+                "attrs": task_item_attrs,
                 "content": [inner_para],
             })
-        return {
+        result: dict[str, Any] = {
             "type": "taskList",
             "attrs": {"margin": {}},
             "content": task_items,
         }
+        node_id = node.get("id")
+        if node_id:
+            result["attrs"]["id"] = node_id
+        return result
 
     # ── Code block ──────────────────────────────────────────────────
     if ntype == "code_block":
@@ -216,6 +246,9 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
             "margin": {},
             "language": node.get("language") or "plaintext",
         }
+        node_id = node.get("id")
+        if node_id:
+            attrs["id"] = node_id
         theme = node.get("theme")
         if theme:
             attrs["theme"] = theme
@@ -236,6 +269,7 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
 
         for row in rows_simple:
             row_type = row.get("row_type") or "body"
+            row_id = row.get("id")
             cell_tag = "tableHeader" if row_type == "header" else "tableCell"
             cells_simple = row.get("cells") or []
             tiptap_cells: list[dict] = []
@@ -255,6 +289,10 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
                                   "color", "colwidth")
                         if k in cell_obj and cell_obj.get(k) is not None
                     }
+                    # Extract cell id
+                    cell_id = cell_obj.get("id")
+                    if cell_id:
+                        extra_attrs["id"] = cell_id
 
                 cell_attrs = _default_cell_attrs(extra_attrs)
 
@@ -272,13 +310,27 @@ def synnoia_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
                     "content": [inner_para],
                 })
 
-            tiptap_rows.append({"type": "tableRow", "content": tiptap_cells})
+            row_obj: dict[str, Any] = {"type": "tableRow", "content": tiptap_cells}
+            if row_id:
+                row_obj["attrs"] = {"id": row_id}
+            tiptap_rows.append(row_obj)
 
-        return {
+        result: dict[str, Any] = {
             "type": "table",
             "attrs": {"margin": {}},
             "content": tiptap_rows,
         }
+        node_id = node.get("id")
+        if node_id:
+            result["attrs"]["id"] = node_id
+        return result
+
+    # ── Image ─────────────────────────────────────────────────────────
+    if ntype == "image":
+        raw = node.get("_raw")
+        if raw:
+            return raw
+        return None
 
     # ── Unknown / raw passthrough ────────────────────────────────────
     raw = node.get("_raw")

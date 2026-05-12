@@ -115,9 +115,11 @@ def parse_heading(node: dict) -> dict:
         "type": "heading",
         "level": attrs.get("level") or 2,
     }
-    toc_id = attrs.get("data-toc-id") or attrs.get("id")
+    node_id = attrs.get("id")
+    if node_id:
+        result["id"] = node_id
+    toc_id = attrs.get("data-toc-id")
     if toc_id:
-        result["id"] = toc_id
         result["toc_id"] = toc_id
     result["text"] = text
     if fmt:
@@ -138,6 +140,11 @@ def parse_paragraph(node: dict) -> dict:
 
     result: dict[str, Any] = {"type": "paragraph"}
 
+    # Extract node id
+    node_id = attrs.get("id")
+    if node_id:
+        result["id"] = node_id
+
     for key, default in [("textAlign", None), ("lineHeight", None),
                           ("indent", None), ("margin", {})]:
         v = attrs.get(key)
@@ -154,6 +161,7 @@ def parse_paragraph(node: dict) -> dict:
 
 
 def parse_blockquote(node: dict) -> dict:
+    attrs = node.get("attrs") or {}
     content = node.get("content") or []
     segments: list[dict] = []
     for child in content:
@@ -161,6 +169,12 @@ def parse_blockquote(node: dict) -> dict:
             segments.extend(extract_text_segments(child.get("content") or []))
 
     result: dict[str, Any] = {"type": "blockquote"}
+
+    # Extract node id
+    node_id = attrs.get("id")
+    if node_id:
+        result["id"] = node_id
+
     if segments:
         result["segments"] = segments
     return result
@@ -188,12 +202,23 @@ def parse_ordered_list(node: dict) -> dict:
         entry: dict[str, Any] = {"index": idx}
         if segs:
             entry["segments"] = segs
+        # Extract listItem id from attrs
+        item_attrs = item.get("attrs") or {}
+        item_id = item_attrs.get("id")
+        if item_id:
+            entry["id"] = item_id
         list_items.append(entry)
 
     result: dict[str, Any] = {
         "type": "ordered_list",
         "listType": attrs.get("listType") or "decimal",
     }
+
+    # Extract node id
+    node_id = attrs.get("id")
+    if node_id:
+        result["id"] = node_id
+
     if list_items:
         result["items"] = list_items
     return result
@@ -209,18 +234,30 @@ def parse_bullet_list(node: dict) -> dict:
         entry: dict[str, Any] = {}
         if segs:
             entry["segments"] = segs
+        # Extract listItem id from attrs
+        item_attrs = item.get("attrs") or {}
+        item_id = item_attrs.get("id")
+        if item_id:
+            entry["id"] = item_id
         list_items.append(entry)
 
     result: dict[str, Any] = {
         "type": "bullet_list",
         "listType": attrs.get("listType") or "disc",
     }
+
+    # Extract node id
+    node_id = attrs.get("id")
+    if node_id:
+        result["id"] = node_id
+
     if list_items:
         result["items"] = list_items
     return result
 
 
 def parse_task_list(node: dict) -> dict:
+    attrs = node.get("attrs") or {}
     items_raw = node.get("content") or []
 
     list_items: list[dict] = []
@@ -231,9 +268,19 @@ def parse_task_list(node: dict) -> dict:
         # Simple flat text for task items (usually single text node)
         text = "".join(s["text"] for s in segs)
         entry: dict[str, Any] = {"checked": checked, "text": text}
+        # Extract taskItem id
+        item_id = item_attrs.get("id")
+        if item_id:
+            entry["id"] = item_id
         list_items.append(entry)
 
     result: dict[str, Any] = {"type": "task_list"}
+
+    # Extract node id
+    node_id = attrs.get("id")
+    if node_id:
+        result["id"] = node_id
+
     if list_items:
         result["items"] = list_items
     return result
@@ -248,6 +295,12 @@ def parse_code_block(node: dict) -> dict:
         "type": "code_block",
         "language": attrs.get("language") or "plaintext",
     }
+
+    # Extract node id
+    node_id = attrs.get("id")
+    if node_id:
+        result["id"] = node_id
+
     theme = attrs.get("theme")
     if theme:
         result["theme"] = theme
@@ -273,6 +326,11 @@ def _parse_table_cell(cell: dict) -> dict:
 
     cell_obj: dict[str, Any] = {"text": simple_text}
 
+    # Extract cell id
+    cell_id = attrs.get("id")
+    if cell_id:
+        cell_obj["id"] = cell_id
+
     # Rich segments only if there is actual formatting
     has_fmt = any("formatting" in s for s in segments)
     if has_fmt:
@@ -294,16 +352,30 @@ def _parse_table_cell(cell: dict) -> dict:
 
 
 def parse_table(node: dict) -> dict:
+    attrs = node.get("attrs") or {}
     rows_raw = node.get("content") or []
     rows: list[dict] = []
 
     for row_node in rows_raw:
+        row_attrs = row_node.get("attrs") or {}
         cells_raw = row_node.get("content") or []
         row_type = "header" if any(c.get("type") == "tableHeader" for c in cells_raw) else "body"
         cells = [_parse_table_cell(c) for c in cells_raw]
-        rows.append({"row_type": row_type, "cells": cells})
+        row_obj: dict[str, Any] = {"row_type": row_type, "cells": cells}
+        # Extract row id
+        row_id = row_attrs.get("id")
+        if row_id:
+            row_obj["id"] = row_id
+        rows.append(row_obj)
 
-    return {"type": "table", "rows": rows}
+    result: dict[str, Any] = {"type": "table", "rows": rows}
+
+    # Extract node id
+    node_id = attrs.get("id")
+    if node_id:
+        result["id"] = node_id
+
+    return result
 
 
 def parse_node(node: dict) -> dict | None:
@@ -318,6 +390,7 @@ def parse_node(node: dict) -> dict | None:
         "taskList": parse_task_list,
         "codeBlock": parse_code_block,
         "table": parse_table,
+        "image": lambda node: {"type": "image", "_raw": node, "id": (node.get("attrs") or {}).get("id")},
     }
     if ntype in dispatch:
         return dispatch[ntype](node)
